@@ -1,78 +1,105 @@
 using System.Collections;
 using System.Collections.Generic;
-using Unity.VisualScripting;
+using TMPro;
 using UnityEngine;
 
-public class NotificationManager : MonoBehaviour {
-    public class Notification {
+public class NotificationManager : MonoBehaviour
+{
+    public class Notification
+    {
         public string message;
         public float duration;
 
-        public Notification(string message, float duration) {
-            this.duration = duration;
+        public Notification(string message, float duration)
+        {
             this.message = message;
+            this.duration = duration;
         }
     }
 
-    public Notification currentNotification;
-    public Queue<Notification> notificationQueue = new Queue<Notification>();
+    [SerializeField] private TextMeshProUGUI textToShow;
+    [SerializeField] private CanvasGroup canvasGroup;
+    [SerializeField, Min(0f)] private float defaultNotificationFadeInDuration = 0.5f;
+    [SerializeField, Min(0f)] private float defaultNotificationFadeOutDuration = 0.5f;
+    [SerializeField, Min(0f)] private float timeBetweenNotifications = 0.5f;
 
-    [SerializeField] TMPro.TextMeshProUGUI textToShow;
-    [SerializeField] CanvasGroup canvasGroup;
-    [SerializeField] float defaultNotificationFadeInDuration = 0.5f;
-    [SerializeField] float defaultNotificationFadeOutDuration = 0.5f;
-    [SerializeField] float timeBetweenNotifications = 0.5f;
+    private readonly Queue<Notification> notificationQueue = new Queue<Notification>();
+    private Notification currentNotification;
+    private float timeRemainingForNextNotification;
 
-    float timeRemainingForNextNotification = 0.0f;
-    public void AddNotification(string message, float duration) {
-        notificationQueue.Enqueue(new Notification(message, duration));
+    private void Awake()
+    {
+        if (canvasGroup != null)
+            canvasGroup.alpha = 0f;
     }
 
-    public void Update() {
-        if (currentNotification == null) {
-            timeRemainingForNextNotification = Mathf.Clamp(timeRemainingForNextNotification - Time.deltaTime, 0, timeBetweenNotifications);
-        }
-        if (notificationQueue.Count == 0) return;
+    public void AddNotification(string message, float duration)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
 
-        if (currentNotification == null) {
-            currentNotification = notificationQueue.Dequeue();
-            StartCoroutine(_InitializeNewNotification(currentNotification));
-        }
-
+        notificationQueue.Enqueue(new Notification(message, Mathf.Max(0f, duration)));
     }
 
-    IEnumerator _InitializeNewNotification(Notification n) {
-        float timer = 0;
-        textToShow.text = n.message;
+    private void Update()
+    {
+        if (currentNotification != null || textToShow == null || canvasGroup == null)
+            return;
 
-        //TODO FADE IN
-        while (timer < defaultNotificationFadeInDuration) {
-
-            canvasGroup.alpha = Mathf.Lerp(0, 1, timer / defaultNotificationFadeInDuration);
-
-            yield return null;
-            timer += Time.deltaTime;
-        }
-        timer = 0;
-
-        //TODO SHOW FOR SECONDS
-        while (timer < n.duration) {
-            yield return null;
-            timer += Time.deltaTime;
+        if (timeRemainingForNextNotification > 0f)
+        {
+            timeRemainingForNextNotification -= Time.deltaTime;
+            return;
         }
 
-        timer = 0;
+        if (notificationQueue.Count == 0)
+            return;
 
-        //TODO HIDE 
-        while (timer < defaultNotificationFadeOutDuration) {
+        currentNotification = notificationQueue.Dequeue();
+        StartCoroutine(ShowNotification(currentNotification));
+    }
 
-            canvasGroup.alpha = Mathf.Lerp(1, 0, timer / defaultNotificationFadeInDuration);
+    private IEnumerator ShowNotification(Notification notification)
+    {
+        textToShow.text = notification.message;
+        canvasGroup.alpha = 0f;
 
-            yield return null;
+        float timer = 0f;
+        while (timer < defaultNotificationFadeInDuration)
+        {
+            canvasGroup.alpha = Mathf.Lerp(0f, 1f, timer / defaultNotificationFadeInDuration);
             timer += Time.deltaTime;
+            yield return null;
         }
-        timeRemainingForNextNotification = timeBetweenNotifications;
+
+        canvasGroup.alpha = 1f;
+        timer = 0f;
+
+        while (timer < notification.duration)
+        {
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        timer = 0f;
+        while (timer < defaultNotificationFadeOutDuration)
+        {
+            canvasGroup.alpha = Mathf.Lerp(1f, 0f, timer / defaultNotificationFadeOutDuration);
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        canvasGroup.alpha = 0f;
         currentNotification = null;
+        timeRemainingForNextNotification = timeBetweenNotifications;
     }
 
+    private void OnDisable()
+    {
+        StopAllCoroutines();
+        currentNotification = null;
+
+        if (canvasGroup != null)
+            canvasGroup.alpha = 0f;
+    }
 }
